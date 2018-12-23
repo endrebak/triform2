@@ -231,17 +231,22 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
 
 def get_ratios(chip, background):
 
-    chip_sizes = get_sizes(chip_dfs)
+    chip_sizes = {f: len(df) for f, df in chip_dfs.items()}
     ratios = {}
-    if background not is None:
-        background_sizes = sum(get_sizes(background_dfs).values())
+    if background is not None:
+        background_sizes = sum(len(df) for df in background.values())
         for f, df in chip.items():
-            ratios[f] = len(df)
+            ratios[f] = len(df) / background_sizes
+        ratio = background_sizes / sum(ratios.values())
 
     else:
-        background_sizes = None
+        ratios = None
+        ratio = 1
+    return ratios, ratio
 
 
 
+ratios, ratio = get_ratios(chip_dfs, input_dfs)
 
-compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args)
+print(ratios)
+# compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args)
