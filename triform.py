@@ -148,13 +148,22 @@ background = init_background(input_coverage, flank_distance)
 # print(background)
 
 
-background_sum = PyRles({("chr1", "+"): Rle([1], [0])})
-# background = {"center": reduce(sum, background.values())}
+def sum_background(background):
 
-for k, v in background.items():
-    background_sum += v
 
-background_sum
+    first_file = list(background.keys())[0]
+    first_key = list(background[first_file].keys())[0]
+    background_sum = PyRles({first_key: Rle([1], [0])})
+
+    for v in background.values():
+
+        background_sum += v
+
+    return background_sum
+
+background_sum = sum_background(background)
+
+# background_sum
 
 # print(background)
 
@@ -166,20 +175,20 @@ background_sum
 
 def get_locs(chip, where):
 
-    results = []
+    results = {}
     for (f, loc), v in chip.items():
 
         if not loc == where:
             continue
 
-        results.append(v)
+        results[f] = v
 
     return results
 
 def sum_chip(chip, where):
 
 
-    locs = get_locs(chip, where)
+    locs = list(get_locs(chip, where).values())
 
     first_loc = locs[0]
     first_key = list(first_loc.keys())[0]
@@ -213,7 +222,7 @@ def qnorm(max_p):
 
     from scipy.stats import norm
 
-    return -norm.ppf(max_p)
+    return norm.ppf(1 - max_p)
 
 # def compute_peaks_and_zscores(cvg, center, left, right, chip, input, ratios, ratio, args):
 
@@ -245,6 +254,47 @@ def compute_ok1(chip):
     return sign_sum
 
 
+def compute_ok23(chip, _type):
+    # _type = "left" if _type == 2 else "right"
+    sign_sum = None
+
+    files = set([f[0] for f in chip.keys()])
+    items = [[chip[f1, "center"], chip[f1, _type]] for f1 in files]
+
+    for c, o in items:
+        s = merge_runs(c - o)
+
+        if sign_sum is None:
+            sign_sum = s
+        else:
+            sign_sum *= s
+
+    return sign_sum
+
+
+def compute_ok4(ratios, center, background):
+
+    assert ratios.keys() == center.keys()
+
+    sign_sum = None
+    for k, ratio in ratios.items():
+        c = center[k]
+        s = merge_runs((c * ratio) - background)
+
+        print("ratio", ratio, k)
+        print("background " * 50)
+        print(background)
+
+        if sign_sum is None:
+            sign_sum = s
+        else:
+            sign_sum *= s
+
+    return sign_sum
+
+    # return r["Reduce"]("*", signs)
+
+
 def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
 
     # center is the center coverage list for each chip_file
@@ -255,6 +305,17 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
     # left_right = left + right
 
     ok1 = compute_ok1(chip)
+    print(ok1["-"])
+
+    ok2 = compute_ok23(chip, "left")
+    print("ok2" * 50)
+    print(ok2["-"])
+    ok3 = compute_ok23(chip, "right")
+    print("ok3" * 50)
+    print(ok3["-"])
+    ok4 = compute_ok4(ratios, center, background)
+    print("ok4" * 50)
+    print(ok4["-"])
 
 
 
@@ -265,6 +326,8 @@ def get_ratios(chip, background):
     if background is not None:
         background_sizes = sum(len(df) for df in background.values())
         for f, df in chip.items():
+            print("ratio compute" * 50)
+            print(f, len(df), background_sizes)
             ratios[f] = len(df) / background_sizes
         ratio = background_sizes / sum(ratios.values())
 
@@ -278,4 +341,5 @@ def get_ratios(chip, background):
 ratios, ratio = get_ratios(chip_dfs, input_dfs)
 
 args = {}
-compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args)
+print(background_sum)
+compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
