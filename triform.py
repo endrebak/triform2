@@ -14,8 +14,8 @@ b2 = "examples/backgr_huds_Gm12878_rep2.bed"
 chip_files = [c1]
 input_files = [b1]
 
-chip_files = [c1, c2]
-input_files = [b1, b2]
+# chip_files = [c1, c2]
+# input_files = [b1, b2]
 
 names = "Chromosome Start End Strand".split()
 
@@ -217,6 +217,33 @@ def qnorm(max_p):
 
 # def compute_peaks_and_zscores(cvg, center, left, right, chip, input, ratios, ratio, args):
 
+def merge_runs(s):
+    _new_rledict = {}
+    for k, v in s.items():
+        v.values[v.values < 0] = 0
+        v.values[v.values > 0] = 1
+        v = Rle(v.runs, v.values)
+        _new_rledict[k] = v
+
+    return PyRles(_new_rledict)
+
+def compute_ok1(chip):
+
+    sign_sum = None
+
+    files = set([f[0] for f in chip.keys()])
+    items = [[chip[f1, "center"], chip[f1, "left"], chip[f1, "right"]] for f1 in files]
+
+    for c, l, r in items:
+        s = merge_runs(((c * 2)  - l) - r)
+
+        if sign_sum is None:
+            sign_sum = s
+        else:
+            sign_sum *= s
+
+    return sign_sum
+
 
 def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
 
@@ -225,8 +252,10 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
 
     min_z = qnorm(max_p)
 
+    # left_right = left + right
 
-    pass
+    ok1 = compute_ok1(chip)
+
 
 
 def get_ratios(chip, background):
@@ -248,5 +277,5 @@ def get_ratios(chip, background):
 
 ratios, ratio = get_ratios(chip_dfs, input_dfs)
 
-print(ratios)
-# compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args)
+args = {}
+compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args)
