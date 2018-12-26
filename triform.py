@@ -23,6 +23,7 @@ names = "Chromosome Start End Strand".split()
 usecols = [0, 1, 2, 5]
 
 read_width = 100
+min_width = 10
 flank_distance = 150
 max_p = 0.1
 
@@ -286,7 +287,7 @@ def compute_ok4(ratios, center, background):
                 continue
 
             c = center[f]
-            s = merge_runs((c[strand] * (1/ratio)) - background[strand])
+            s = merge_runs((c[strand] * (ratio)) - background[strand])
 
             if not sign_sum.get(strand):
                 sign_sum[strand] = s
@@ -300,6 +301,79 @@ def compute_ok4(ratios, center, background):
             merge_strands[k] = v
 
     return PyRles(merge_strands)
+
+
+def _zscores(x, y, ratio=1):
+
+    _zscores = r("""
+function(x,y,r) {  # r = size.y/size.x
+  dif <- (r*x-y)
+  zs <- dif/sqrt(r*(x+y))
+  zs[!dif] <- 0
+  zs
+}
+""")
+    return _zscores(x, y, ratio)
+
+
+def zscores(x, y, ratio=1):
+
+    _ratio = ratio
+
+    # zs = ratio * (x - y)
+    new_pyrle = {}
+    print("ratio")
+    print(ratio)
+    for k, v in (x + y).items():
+
+        if isinstance(ratio, dict):
+            _ratio = ratio[k[1]]
+
+        _ratio = _ratio
+        difference = (_ratio * x[k]) - y[k]
+
+        denominator = Rle(v.runs, np.nan_to_num(np.sqrt((_ratio * v).values)))
+        zs = difference / denominator
+        zs = zs.numbers_only()
+        zs.values[zs.values < 0] = 0
+        zs = zs.defragment()
+        new_pyrle[k] = zs
+
+
+    # denominator = PyRles(denominator)
+    # print("denominator")
+    # print(denominator)
+    # zs = difference / denominator
+
+    return PyRles(new_pyrle)
+
+def slice_min_z(pyrle, min_z):
+
+    new_pyrle = {}
+    for k, v in pyrle.items():
+        # print("k " * 50, k)
+        v = v.copy()
+        # print(v)
+        v.values[v.values < min_z] = 0
+        # print(v)
+        new_pyrle[k] = v.defragment()
+        # print(new_pyrle[k])
+
+    return PyRles(new_pyrle)
+
+
+def remove_too_short(pyrle, min_width):
+
+    new_pyrle = {}
+    for k, v in pyrle.items():
+        v = v.copy()
+        v.values[v.values != 0] = 1
+        v = v.defragment()
+        v.values[v.runs < min_width] = 0
+        new_pyrle[k] = v.defragment()
+
+    return PyRles(new_pyrle)
+
 
 
 def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
@@ -321,47 +395,124 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
     # print("ok3" * 50)
     # print(ok3["-"])
     ok4 = compute_ok4(ratios, center, background)
-    print("ok4" * 50)
-    print(ok4["-"])
+    # print("ok4" * 50)
+    # print(ok4["-"])
+
+    # print("")
+    # print(" cvg " * 50)
+    # print(cvg)
+    # print(left + right)
+    zs1 = (ok1 * zscores(cvg, left + right, 2)).defragment(numbers_only=True)
+    zs2 = (ok2 * zscores(cvg, left)).defragment(numbers_only=True)
+    zs3 = (ok3 * zscores(cvg, right)).defragment(numbers_only=True)
+    zs4 = (ok4 * zscores(cvg, background, ratio)).defragment(numbers_only=True)
+
+    # print("zs1")
+    # print(zs1["-"])
+    peaks1 = slice_min_z(zs1, min_z)
+    peaks2 = slice_min_z(zs2, min_z)
+    peaks3 = slice_min_z(zs3, min_z)
+    peaks4 = slice_min_z(zs4, min_z)
+
+    subset1 = remove_too_short(peaks1, min_width)
+    subset2 = remove_too_short(peaks2, min_width)
+    subset3 = remove_too_short(peaks3, min_width)
+    subset4 = remove_too_short(peaks4, min_width)
+
+    # print("peaks1")
+    # print(peaks1["-"])
+    # print("subset1")
+    # print(subset1["-"])
+    peaks1 *= subset1
+    peaks2 *= subset2
+    peaks3 *= subset3
+    peaks4 *= subset4
+
+    peaks1 *= peaks4 # * subset1
+    peaks2 *= peaks4 # * subset2
+    peaks3 *= peaks4 # * subset3
+    # peaks4 *= subset4
+    # print("peaks1")
+    # print(peaks1["-"])
+
+    subset1 = remove_too_short(peaks1, min_width)
+    subset2 = remove_too_short(peaks2, min_width)
+    subset3 = remove_too_short(peaks3, min_width)
+
+    peaks1 *= subset1
+    peaks2 *= subset2
+    peaks3 *= subset3
+
+
+    # print("peaks1")
+    # print(peaks1["-"])
+    # print("peaks2")
+    # print(peaks2["-"])
+    # print("peaks3")
+    # print(peaks3["-"])
+
+    _peaks = [peaks1, peaks2, peaks3]
+    _zscores = [zs1, zs2, zs3]
+
+    return _peaks, _zscores
+
+    # print("peaks4 " * 50)
+    # print(peaks4["-"])
+
+    # runs = peaks2["chrY", "-"].runs
+    # values = peaks2["chrY", "-"].values
+    # import pandas as pd
+    # pd.DataFrame(runs, values).to_csv("chry_m.txt", sep=" ")
+
+
+    # print("zs1" * 50)
+    # print(zs1["-"])
+    # print("zs2" * 50)
+    # print(zs2["-"])
+    # print("zs3" * 50)
+    # print(zs3["-"])
+    # print("zs4" * 50)
+    # print(zs4["-"])
+
 
 
 
 def get_ratios(chip, background):
 
-    # print("background", background)
-    # print("chip", chip)
-
-    # chip_sizes = {f: len(df) for f, df in chip_dfs.items()}
     chip_sizes = {}
     for f, df in chip_dfs.items():
         for s, sdf in df.groupby("Strand"):
             chip_sizes[f, s] = len(sdf)
 
 
-    background_sizes = defaultdict(int) # sum(len(df) for df in background.values())
+    background_sizes = defaultdict(int)
     for df in background.values():
         for s, sdf in df.groupby("Strand"):
             background_sizes[s] += len(sdf)
 
     per_file_ratios = {}
-    ratios = {}
+    ratios = defaultdict(int)
     if background is not None:
         for (f, strand), size in chip_sizes.items():
-            # print("ratio compute" * 50)
-            # print(f, len(df), background_sizes)
             per_file_ratios[f, strand] = size / background_sizes[strand]
-        ratios[strand] = background_sizes[strand] / sum(size for (f, s), size in per_file_ratios.items() if strand == s)
+            ratios[strand] += size
+
+        ratios = {s: background_sizes[s]/v for s, v in ratios.items()}
 
     else:
-        ratios = None
+        per_file_ratios = None
         ratios = {"+": 1, "-": 1}
 
     return per_file_ratios, ratios
-
-
 
 ratios, ratio = get_ratios(chip_dfs, input_dfs)
 
 args = {}
 print(background_sum)
-compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+peaks, zs = compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+
+peaks1 = peaks[0]
+
+ranges1 = peaks1.to_ranges()
+print(ranges1.apply(lambda k, df: df[~(df.Score == 0)]))
+print(zs[0])
