@@ -369,12 +369,26 @@ def remove_too_short(pyrle, min_width):
         v = v.copy()
         v.values[v.values != 0] = 1
         v = v.defragment()
-        v.values[v.runs < min_width] = 0
+        v.values[v.runs <= min_width] = 0
         new_pyrle[k] = v.defragment()
 
     return PyRles(new_pyrle)
 
 
+
+def remove_empty(df, _):
+    df = df[~(df.Score == 0)]
+
+    return df
+
+def add_1_to_start(df, _):
+
+    df.Start += 1
+    return df
+
+# result = ranges1.apply(lambda df, _: df[~(df.Score == 0)]).cluster(strand=True)
+
+# result = ranges1.apply(remove_empty).cluster(strand=True).apply(add_1_to_start)
 
 def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
 
@@ -443,6 +457,10 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
     peaks2 *= subset2
     peaks3 *= subset3
 
+    # only calling remove_too_short here to set values to 1
+    peaks1 = remove_too_short(peaks1, min_width)
+    peaks2 = remove_too_short(peaks2, min_width)
+    peaks3 = remove_too_short(peaks3, min_width)
 
     # print("peaks1")
     # print(peaks1["-"])
@@ -452,9 +470,29 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
     # print(peaks3["-"])
 
     _peaks = [peaks1, peaks2, peaks3]
+    _peaks = [p.to_ranges().apply(remove_empty).cluster(strand=True).apply(add_1_to_start) for p in _peaks]
     _zscores = [zs1, zs2, zs3]
 
     return _peaks, _zscores
+
+
+# ranges1 = peaks1.to_ranges()
+
+def remove_empty(df, _):
+    df = df[~(df.Score == 0)]
+
+    return df
+
+def add_1_to_start(df, _):
+
+    df.Start += 1
+    return df
+
+# result = ranges1.apply(lambda df, _: df[~(df.Score == 0)]).cluster(strand=True)
+
+
+
+    # return _peaks, _zscores
 
     # print("peaks4 " * 50)
     # print(peaks4["-"])
@@ -508,11 +546,24 @@ def get_ratios(chip, background):
 ratios, ratio = get_ratios(chip_dfs, input_dfs)
 
 args = {}
-print(background_sum)
-peaks, zs = compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+# print(background_sum)
+all_peaks, zs = compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
 
-peaks1 = peaks[0]
+for peak_type, peaks in enumerate(all_peaks, 1):
+    print(peak_type)
+    print(peaks)
+    # peaks1 = peaks[0]
 
-ranges1 = peaks1.to_ranges()
-print(ranges1.apply(lambda k, df: df[~(df.Score == 0)]))
-print(zs[0])
+# print("as coverage" * 50)
+# print(peaks1)
+# rle1 = peaks1["chrY", "+"]
+
+
+# import pandas as pd
+# pd.DataFrame(rle1.runs, rle1.values).to_csv("chry_f.txt", sep=" ")
+# 431 + 434
+
+# print(result)
+# result.df.to_csv("pr1_2.txt", sep=" ")
+# print(result)
+# print(zs[0])
