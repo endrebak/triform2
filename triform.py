@@ -1,4 +1,5 @@
 from itertools import product
+from collections import defaultdict
 from functools import reduce
 import pandas as pd
 
@@ -274,25 +275,31 @@ def compute_ok23(chip, _type):
 
 def compute_ok4(ratios, center, background):
 
-    assert ratios.keys() == center.keys()
+    # print(ratios.keys())
+    # print(center.keys())
+    # assert ratios.keys() == center.keys()
 
-    sign_sum = None
-    for k, ratio in ratios.items():
-        c = center[k]
-        s = merge_runs((c * ratio) - background)
+    sign_sum = {}
+    for strand in ["+", "-"]:
+        for (f, _strand), ratio in ratios.items():
+            if _strand != strand:
+                continue
 
-        print("ratio", ratio, k)
-        print("background " * 50)
-        print(background)
+            c = center[f]
+            s = merge_runs((c[strand] * (1/ratio)) - background[strand])
 
-        if sign_sum is None:
-            sign_sum = s
-        else:
-            sign_sum *= s
+            if not sign_sum.get(strand):
+                sign_sum[strand] = s
+            else:
+                sign_sum[strand] *= s
 
-    return sign_sum
 
-    # return r["Reduce"]("*", signs)
+    merge_strands = {}
+    for d in sign_sum.values():
+        for k, v in d.items():
+            merge_strands[k] = v
+
+    return PyRles(merge_strands)
 
 
 def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
@@ -305,14 +312,14 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
     # left_right = left + right
 
     ok1 = compute_ok1(chip)
-    print(ok1["-"])
+    # print(ok1["-"])
 
     ok2 = compute_ok23(chip, "left")
-    print("ok2" * 50)
-    print(ok2["-"])
+    # print("ok2" * 50)
+    # print(ok2["-"])
     ok3 = compute_ok23(chip, "right")
-    print("ok3" * 50)
-    print(ok3["-"])
+    # print("ok3" * 50)
+    # print(ok3["-"])
     ok4 = compute_ok4(ratios, center, background)
     print("ok4" * 50)
     print(ok4["-"])
@@ -321,20 +328,35 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
 
 def get_ratios(chip, background):
 
-    chip_sizes = {f: len(df) for f, df in chip_dfs.items()}
+    # print("background", background)
+    # print("chip", chip)
+
+    # chip_sizes = {f: len(df) for f, df in chip_dfs.items()}
+    chip_sizes = {}
+    for f, df in chip_dfs.items():
+        for s, sdf in df.groupby("Strand"):
+            chip_sizes[f, s] = len(sdf)
+
+
+    background_sizes = defaultdict(int) # sum(len(df) for df in background.values())
+    for df in background.values():
+        for s, sdf in df.groupby("Strand"):
+            background_sizes[s] += len(sdf)
+
+    per_file_ratios = {}
     ratios = {}
     if background is not None:
-        background_sizes = sum(len(df) for df in background.values())
-        for f, df in chip.items():
-            print("ratio compute" * 50)
-            print(f, len(df), background_sizes)
-            ratios[f] = len(df) / background_sizes
-        ratio = background_sizes / sum(ratios.values())
+        for (f, strand), size in chip_sizes.items():
+            # print("ratio compute" * 50)
+            # print(f, len(df), background_sizes)
+            per_file_ratios[f, strand] = size / background_sizes[strand]
+        ratios[strand] = background_sizes[strand] / sum(size for (f, s), size in per_file_ratios.items() if strand == s)
 
     else:
         ratios = None
-        ratio = 1
-    return ratios, ratio
+        ratios = {"+": 1, "-": 1}
+
+    return per_file_ratios, ratios
 
 
 
