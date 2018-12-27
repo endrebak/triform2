@@ -32,6 +32,7 @@ read_width = 100
 min_width = 10
 flank_distance = 150
 max_p = 0.1
+min_er = 3/8
 
 def extend_df(df, read_width):
 
@@ -486,108 +487,6 @@ def _compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratio
     _zscores = [zs1, zs2, zs3]
 
     return _peaks, _zscores
-# def _compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
-
-    # center is the center coverage list for each chip_file
-    # cvg is the summed coverage across files (same with right, left)#
-#     min_z = qnorm(max_p)
-
-    # left_right = left + right#
-#     ok1 = compute_ok1(chip)
-    # print(ok1["-"])#
-
-#     ok2 = compute_ok23(chip, "left")
-    # print("ok2" * 50)
-    # print(ok2["-"])#
-#     ok3 = compute_ok23(chip, "right")
-    # print("ok3" * 50)
-    # print(ok3["-"])#
-#     ok4 = compute_ok4(ratios, center, background)
-    # print("ok4" * 50)
-    # print(ok4["-"])#
-
-    # print("")
-    # print(" cvg " * 50)
-    # print(cvg)
-    # print(left + right)#
-#     zs1 = (ok1 * zscores(cvg, left + right, 2)).defragment(numbers_only=True)
-#     zs2 = (ok2 * zscores(cvg, left)).defragment(numbers_only=True)
-#     zs3 = (ok3 * zscores(cvg, right)).defragment(numbers_only=True)
-#     zs4 = (ok4 * zscores(cvg, background, ratio)).defragment(numbers_only=True)
-
-    # print("zs1")
-    # print(zs1["-"])#
-#     #check that each peak has a max
-#     peaks1 = slice_min_z(zs1, min_z)
-#     print("peaks1")
-#     print(peaks1)
-#     peaks2 = slice_min_z(zs2, min_z)
-#     peaks3 = slice_min_z(zs3, min_z)
-#     peaks4 = slice_min_z(zs4, min_z)
-
-#     subset1 = remove_too_short(peaks1, min_width)
-#     print("subset1")
-#     print(subset1)
-#     subset2 = remove_too_short(peaks2, min_width)
-#     subset3 = remove_too_short(peaks3, min_width)
-#     subset4 = remove_too_short(peaks4, min_width)
-
-    # print("peaks1")
-    # print(peaks1["-"])
-    # print("subset1")
-    # print(subset1["-"])#
-#     peaks1 *= subset1
-#     # print("peaks1")
-#     # print(peaks1)
-#     # raise
-#     peaks2 *= subset2
-#     peaks3 *= subset3
-#     peaks4 *= subset4
-
-#         # print(peaks1)
-#     #     peaks1 *= peaks4 # * subset1
-#     #     peaks2 *= peaks4 # * subset2
-#     #     peaks3 *= peaks4 # * subset3
-    # peaks4 *= subset4
-    # print("peaks1")
-    # print(peaks1["-"])# #
-
-#     subset1 = remove_too_short(peaks1, min_width)
-#     subset2 = remove_too_short(peaks2, min_width)
-#     subset3 = remove_too_short(peaks3, min_width)
-
-#     # print(subset1)
-
-
-#     # s1 = subset1.to_ranges()
-#     # print(s1)
-#     # raise
-#     #     print(subset1)
-#     #     raise
-
-#     peaks1 *= subset1
-#     peaks2 *= subset2
-#     peaks3 *= subset3
-
-#     peaks1 = remove_too_short(peaks1, min_width)
-#     peaks2 = remove_too_short(peaks2, min_width)
-#     peaks3 = remove_too_short(peaks3, min_width)
-
-#     zs1 *= peaks1
-#     zs2 *= peaks2
-#     zs3 *= peaks3
-    print("peaks1")
-    print(peaks1["-"])
-    print("peaks2")
-    print(peaks2["-"])
-    print("peaks3")
-    print(peaks3["-"])# #
-
-#     _zscores = [zs1, zs2, zs3]
-#     _peaks = [peaks1, peaks2, peaks3]
-#     _peaks = [p.to_ranges().apply(remove_empty).cluster(strand=True).apply(add_1_to_start) for p in _peaks]
-
-#     return _peaks, _zscores
 
 
 # ranges1 = peaks1.to_ranges()
@@ -601,33 +500,6 @@ def add_1_to_start(df, _):
 
     df.Start += 1
     return df
-
-# result = ranges1.apply(lambda df, _: df[~(df.Score == 0)]).cluster(strand=True)
-
-
-
-    # return _peaks, _zscores
-
-    # print("peaks4 " * 50)
-    # print(peaks4["-"])
-
-    # runs = peaks2["chrY", "-"].runs
-    # values = peaks2["chrY", "-"].values
-    # import pandas as pd
-    # pd.DataFrame(runs, values).to_csv("chry_m.txt", sep=" ")
-
-
-    # print("zs1" * 50)
-    # print(zs1["-"])
-    # print("zs2" * 50)
-    # print(zs2["-"])
-    # print("zs3" * 50)
-    # print(zs3["-"])
-    # print("zs4" * 50)
-    # print(zs4["-"])
-
-
-
 
 def get_ratios(chip, background):
 
@@ -718,9 +590,9 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
     for peak_type, peaks in enumerate(all_peaks, 1):
 
         max_zs = find_max(zs[peak_type - 1])
-        print(max_zs)
         # print(max_zs)
-        print(sum(len(v) for v in max_zs.values()))
+        # print(max_zs)
+        # print(sum(len(v) for v in max_zs.values()))
 
         result = {k: -(pnorm(v)/np.log(10)) for k, v in max_zs.items()}
         # print(result)
@@ -737,12 +609,56 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
         # print(peaks["-"].Location)
         peaks.Type = peak_type
 
-        print(peaks)
-        loc_cvg = PyRanges(seqnames=peaks.Chromosome, starts=peaks.Location + 1, ends=peaks.Location + 2, strands=peaks.Strand).coverage()
+        loc_cvg = PyRanges(seqnames=peaks.Chromosome, starts=peaks.Location, ends=peaks.Location + 1, strands=peaks.Strand).coverage()
 
         # print("peak_type " * 50, peak_type)
         # print(cvg)
-        loc_cvg *= cvg
+        chip_cvg = loc_cvg * cvg
+        bg_cvg = loc_cvg * background_sum
+        # print("ooo " * 50)
+        # print(bg_cvg)
+
+    # for k, v in (x + y).items():
+
+        peak_enrich_cvg_f = 1 + (ratio["+"] * chip_cvg["+"])
+        peak_enrich_cvg_r = 1 + (ratio["-"] * chip_cvg["-"])
+        peak_enrich_cvg = PyRles({k: v for k, v in peak_enrich_cvg_r.items() + peak_enrich_cvg_f.items()})
+        peak_enrich_ref = 1 + (bg_cvg)
+        peak_enrich = peak_enrich_cvg / peak_enrich_ref
+
+        vals_f = np.concatenate([ v.values for v in peak_enrich["+"].values() ])
+        vals_r = np.concatenate([ v.values for v in peak_enrich["-"].values() ])
+        # vals_f = np.nan_to_num(vals_f)
+        # vals_r = np.nan_to_num(vals_r)
+        # vals_r = vals_r[np.isfinite(vals_r)]
+
+        vals_f = vals_f[vals_f > 1]
+        vals_r = vals_r[vals_r > 1]
+
+        if peak_type == 1:
+            min_er_f = np.percentile(vals_f, min_er * 100)
+            min_er_r = np.percentile(vals_r, min_er * 100)
+
+        vals_f = vals_f > min_er_f
+        vals_r = vals_r > min_er_r
+
+        # print("f " * 50)
+        # print(sum(vals_f))
+
+
+        # print(len(vals_f))
+        # print(len(vals_r))
+        # print(peaks)
+
+        # print("ooooo " * 50)
+        # print(peak_enrich_cvg_r)
+        # print(min_er_r)
+        # above_r = slice_min_z(peak_enrich_cvg_r, min_er_r)
+        # above_f = slice_min_z(peak_enrich_cvg_f, min_er_f)
+
+        # above = PyRles({k: v for k, v in above_r.items() + above_f.items()})
+
+
         # print("peak_type " * 50, peak_type)
         # print(loc_cvg)
         # print(" pr " * 50)
