@@ -6,6 +6,12 @@ import pandas as pd
 from pyrle import PyRles, Rle
 
 import numpy as np
+import pandas as pd
+from scipy.stats import norm
+
+from natsort import natsorted
+
+from pyranges import PyRanges
 
 c1 = "examples/srf_huds_Gm12878_rep1.bed"
 c2 = "examples/srf_huds_Gm12878_rep2.bed"
@@ -222,8 +228,6 @@ center = get_locs(chip, "center")
 
 def qnorm(max_p):
 
-    from scipy.stats import norm
-
     return norm.ppf(1 - max_p)
 
 # def compute_peaks_and_zscores(cvg, center, left, right, chip, input, ratios, ratio, args):
@@ -389,8 +393,7 @@ def add_1_to_start(df, _):
 # result = ranges1.apply(lambda df, _: df[~(df.Score == 0)]).cluster(strand=True)
 
 # result = ranges1.apply(remove_empty).cluster(strand=True).apply(add_1_to_start)
-
-def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
+def _compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
 
     # center is the center coverage list for each chip_file
     # cvg is the summed coverage across files (same with right, left)
@@ -468,12 +471,123 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios
     # print(peaks2["-"])
     # print("peaks3")
     # print(peaks3["-"])
+    zs1 *= peaks1
+    zs2 *= peaks2
+    zs3 *= peaks3
+    # print("peaks1")
+    # print(peaks1["-"])
+    # print("peaks2")
+    # print(peaks2["-"])
+    # print("peaks3")
+    # print(peaks3["-"])# #
 
     _peaks = [peaks1, peaks2, peaks3]
     _peaks = [p.to_ranges().apply(remove_empty).cluster(strand=True).apply(add_1_to_start) for p in _peaks]
     _zscores = [zs1, zs2, zs3]
 
     return _peaks, _zscores
+# def _compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratios, ratio, args):
+
+    # center is the center coverage list for each chip_file
+    # cvg is the summed coverage across files (same with right, left)#
+#     min_z = qnorm(max_p)
+
+    # left_right = left + right#
+#     ok1 = compute_ok1(chip)
+    # print(ok1["-"])#
+
+#     ok2 = compute_ok23(chip, "left")
+    # print("ok2" * 50)
+    # print(ok2["-"])#
+#     ok3 = compute_ok23(chip, "right")
+    # print("ok3" * 50)
+    # print(ok3["-"])#
+#     ok4 = compute_ok4(ratios, center, background)
+    # print("ok4" * 50)
+    # print(ok4["-"])#
+
+    # print("")
+    # print(" cvg " * 50)
+    # print(cvg)
+    # print(left + right)#
+#     zs1 = (ok1 * zscores(cvg, left + right, 2)).defragment(numbers_only=True)
+#     zs2 = (ok2 * zscores(cvg, left)).defragment(numbers_only=True)
+#     zs3 = (ok3 * zscores(cvg, right)).defragment(numbers_only=True)
+#     zs4 = (ok4 * zscores(cvg, background, ratio)).defragment(numbers_only=True)
+
+    # print("zs1")
+    # print(zs1["-"])#
+#     #check that each peak has a max
+#     peaks1 = slice_min_z(zs1, min_z)
+#     print("peaks1")
+#     print(peaks1)
+#     peaks2 = slice_min_z(zs2, min_z)
+#     peaks3 = slice_min_z(zs3, min_z)
+#     peaks4 = slice_min_z(zs4, min_z)
+
+#     subset1 = remove_too_short(peaks1, min_width)
+#     print("subset1")
+#     print(subset1)
+#     subset2 = remove_too_short(peaks2, min_width)
+#     subset3 = remove_too_short(peaks3, min_width)
+#     subset4 = remove_too_short(peaks4, min_width)
+
+    # print("peaks1")
+    # print(peaks1["-"])
+    # print("subset1")
+    # print(subset1["-"])#
+#     peaks1 *= subset1
+#     # print("peaks1")
+#     # print(peaks1)
+#     # raise
+#     peaks2 *= subset2
+#     peaks3 *= subset3
+#     peaks4 *= subset4
+
+#         # print(peaks1)
+#     #     peaks1 *= peaks4 # * subset1
+#     #     peaks2 *= peaks4 # * subset2
+#     #     peaks3 *= peaks4 # * subset3
+    # peaks4 *= subset4
+    # print("peaks1")
+    # print(peaks1["-"])# #
+
+#     subset1 = remove_too_short(peaks1, min_width)
+#     subset2 = remove_too_short(peaks2, min_width)
+#     subset3 = remove_too_short(peaks3, min_width)
+
+#     # print(subset1)
+
+
+#     # s1 = subset1.to_ranges()
+#     # print(s1)
+#     # raise
+#     #     print(subset1)
+#     #     raise
+
+#     peaks1 *= subset1
+#     peaks2 *= subset2
+#     peaks3 *= subset3
+
+#     peaks1 = remove_too_short(peaks1, min_width)
+#     peaks2 = remove_too_short(peaks2, min_width)
+#     peaks3 = remove_too_short(peaks3, min_width)
+
+#     zs1 *= peaks1
+#     zs2 *= peaks2
+#     zs3 *= peaks3
+    print("peaks1")
+    print(peaks1["-"])
+    print("peaks2")
+    print(peaks2["-"])
+    print("peaks3")
+    print(peaks3["-"])# #
+
+#     _zscores = [zs1, zs2, zs3]
+#     _peaks = [peaks1, peaks2, peaks3]
+#     _peaks = [p.to_ranges().apply(remove_empty).cluster(strand=True).apply(add_1_to_start) for p in _peaks]
+
+#     return _peaks, _zscores
 
 
 # ranges1 = peaks1.to_ranges()
@@ -547,13 +661,108 @@ ratios, ratio = get_ratios(chip_dfs, input_dfs)
 
 args = {}
 # print(background_sum)
-all_peaks, zs = compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
 
-for peak_type, peaks in enumerate(all_peaks, 1):
-    print(peak_type)
-    print(peaks)
-    # peaks1 = peaks[0]
+def find_max(zscores):
 
+    # TODO: cythonize me?
+
+    max_zs_dict = defaultdict(list)
+    for k, v in zscores.items():
+        max_zs = []
+        max_z = 0
+
+        first_nonzero = 0
+        for i in v.values:
+            if i == 0:
+                first_nonzero += 1
+            else:
+                break
+
+        for i in v.values[first_nonzero:]:
+            if i == 0:
+                max_zs.append(max_z)
+                max_z = 0
+            else:
+                max_z = max(max_z, i)
+
+        if max_z != 0:
+            max_zs.append(max_z)
+
+        max_zs_dict[k] = np.array(max_zs)
+
+    return max_zs_dict
+
+
+def pnorm(max_z):
+
+    np.seterr(divide="ignore")
+    r = np.log(1 - norm.cdf(max_z))
+    np.seterr(divide="warn")
+
+    return r
+
+
+def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args):
+
+    all_peaks, zs = _compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+
+    # for p in all_peaks[1:]:
+    #     hits = p.intersect(all_peaks[0])
+    #     print("overlapping")
+    #     print(hits)
+    #     nonoverlapping = p.subtract(hits)
+    #     print("nonoverlapping")
+    #     print(nonoverlapping)
+
+    peaks_with_info = []
+    for peak_type, peaks in enumerate(all_peaks, 1):
+
+        max_zs = find_max(zs[peak_type - 1])
+        print(max_zs)
+        # print(max_zs)
+        print(sum(len(v) for v in max_zs.values()))
+
+        result = {k: -(pnorm(v)/np.log(10)) for k, v in max_zs.items()}
+        # print(result)
+        bla = np.concatenate([result[k] for k in natsorted(result)])
+        # print(pd.Series(bla))
+        peaks.NLP = bla
+        # print(peaks)
+
+        peaks.Location = np.array(np.ceil((peaks.Start + peaks.End)/2), dtype=np.long)
+
+        # print("forward " * 50)
+        # print(peaks["+"].Location)
+        # print("reverse " * 50)
+        # print(peaks["-"].Location)
+        peaks.Type = peak_type
+
+        print(peaks)
+        loc_cvg = PyRanges(seqnames=peaks.Chromosome, starts=peaks.Location + 1, ends=peaks.Location + 2, strands=peaks.Strand).coverage()
+
+        # print("peak_type " * 50, peak_type)
+        # print(cvg)
+        loc_cvg *= cvg
+        # print("peak_type " * 50, peak_type)
+        # print(loc_cvg)
+        # print(" pr " * 50)
+        # print(pr)
+
+
+        # peaks_with_info.append(peaks)
+
+
+
+
+
+
+
+
+
+# 865 - 431
+        # maxz = np.array()
+
+compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
 # print("as coverage" * 50)
 # print(peaks1)
 # rle1 = peaks1["chrY", "+"]
