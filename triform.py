@@ -327,8 +327,8 @@ def zscores(x, y, ratio=1):
 
     # zs = ratio * (x - y)
     new_pyrle = {}
-    print("ratio")
-    print(ratio)
+    # print("ratio")
+    # print(ratio)
     for k, v in (x + y).items():
 
         if isinstance(ratio, dict):
@@ -422,7 +422,11 @@ def _compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratio
     # print(left + right)
     zs1 = (ok1 * zscores(cvg, left + right, 2)).defragment(numbers_only=True)
     zs2 = (ok2 * zscores(cvg, left)).defragment(numbers_only=True)
+
     zs3 = (ok3 * zscores(cvg, right)).defragment(numbers_only=True)
+    # _3 = zs3["chrY", "-"].values
+    # _3 = _3[_3 != 0]
+    # print(_3)
     zs4 = (ok4 * zscores(cvg, background, ratio)).defragment(numbers_only=True)
 
     # print("zs1")
@@ -472,9 +476,20 @@ def _compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratio
     # print(peaks2["-"])
     # print("peaks3")
     # print(peaks3["-"])
+    # print(zs1)
     zs1 *= peaks1
+    # print(zs1)
     zs2 *= peaks2
+    # _3 = zs3["chrY", "-"].values
+    # _3 = _3[_3 != 0]
+    # print(pd.Series(_3))
+    # print(zs3)
     zs3 *= peaks3
+    # print(zs3)
+    # print(zs3["chrY", "-"].values)
+    # _3 = zs3["chrY", "-"].values
+    # _3 = _3[_3 != 0]
+    # print(pd.Series(_3))
     # print("peaks1")
     # print(peaks1["-"])
     # print("peaks2")
@@ -569,6 +584,8 @@ def pnorm(max_z):
 
     np.seterr(divide="ignore")
     r = np.log(1 - norm.cdf(max_z))
+    # print("len(r)" * 5)
+    # print(len(r))
     np.seterr(divide="warn")
 
     return r
@@ -586,51 +603,38 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
     #     print("nonoverlapping")
     #     print(nonoverlapping)
 
-    peaks_with_info = []
+    # print(all_peaks)
+    # raise
+
+    peaks_with_info = {}
     for peak_type, peaks in enumerate(all_peaks, 1):
 
         max_zs = find_max(zs[peak_type - 1])
-        # print(max_zs)
-        # print(max_zs)
-        # print(sum(len(v) for v in max_zs.values()))
 
         result = {k: -(pnorm(v)/np.log(10)) for k, v in max_zs.items()}
-        # print(result)
-        bla = np.concatenate([result[k] for k in natsorted(result)])
-        # print(pd.Series(bla))
-        peaks.NLP = bla
-        # print(peaks)
+        peaks.NLP = np.around(np.concatenate([result[k] for k in natsorted(result)]), 3)
 
         peaks.Location = np.array(np.ceil((peaks.Start + peaks.End)/2), dtype=np.long)
 
-        # print("forward " * 50)
-        # print(peaks["+"].Location)
-        # print("reverse " * 50)
-        # print(peaks["-"].Location)
         peaks.Type = peak_type
 
-        loc_cvg = PyRanges(seqnames=peaks.Chromosome, starts=peaks.Location, ends=peaks.Location + 1, strands=peaks.Strand).coverage()
+        peaks_loc = PyRanges(seqnames=peaks.Chromosome, starts=peaks.Location, ends=peaks.Location + 1, strands=peaks.Strand)
+        loc_cvg = peaks_loc.coverage()
 
-        # print("peak_type " * 50, peak_type)
-        # print(cvg)
         chip_cvg = loc_cvg * cvg
         bg_cvg = loc_cvg * background_sum
-        # print("ooo " * 50)
-        # print(bg_cvg)
-
-    # for k, v in (x + y).items():
 
         peak_enrich_cvg_f = 1 + (ratio["+"] * chip_cvg["+"])
         peak_enrich_cvg_r = 1 + (ratio["-"] * chip_cvg["-"])
-        peak_enrich_cvg = PyRles({k: v for k, v in peak_enrich_cvg_r.items() + peak_enrich_cvg_f.items()})
+        peak_enrich_cvg = PyRles({k: v for k, v in list(peak_enrich_cvg_r.items() + peak_enrich_cvg_f.items())})
+
         peak_enrich_ref = 1 + (bg_cvg)
         peak_enrich = peak_enrich_cvg / peak_enrich_ref
 
-        vals_f = np.concatenate([ v.values for v in peak_enrich["+"].values() ])
-        vals_r = np.concatenate([ v.values for v in peak_enrich["-"].values() ])
-        # vals_f = np.nan_to_num(vals_f)
-        # vals_r = np.nan_to_num(vals_r)
-        # vals_r = vals_r[np.isfinite(vals_r)]
+        vals_f = np.concatenate([peak_enrich[k].values for k in peak_enrich["+"].keys()])
+        vals_r = np.concatenate([peak_enrich[k].values for k in peak_enrich["-"].keys()])
+        vals_f = vals_f[np.isfinite(vals_f)]
+        vals_r = vals_r[np.isfinite(vals_r)]
 
         vals_f = vals_f[vals_f > 1]
         vals_r = vals_r[vals_r > 1]
@@ -642,30 +646,97 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
         vals_f = vals_f > min_er_f
         vals_r = vals_r > min_er_r
 
-        # print("f " * 50)
-        # print(sum(vals_f))
+        peaks["+"].Enrichment = vals_f
+        peaks["-"].Enrichment = vals_r
+
+        peaks_loc["+"].Enrichment = vals_f
+        peaks_loc["-"].Enrichment = vals_r
+
+        peaks = peaks.apply(lambda df, _: df[df.Enrichment].drop("Enrichment", axis=1))
+        peaks_loc = peaks_loc.apply(lambda df, _: df[df.Enrichment].drop("Enrichment", axis=1))
+        peaks_loc.Start += 1
+        peaks_loc.End += 1
 
 
-        # print(len(vals_f))
-        # print(len(vals_r))
+        chip_cvg = np.array(np.concatenate([cvg[k][peaks[k].Location] for k in cvg.keys()]), dtype=np.long)
+        left_cvg = np.array(np.concatenate([left[k][peaks[k].Location] for k in left.keys()]), dtype=np.long)
+        right_cvg = np.array(np.concatenate([right[k][peaks[k].Location] for k in right.keys()]), dtype=np.long)
+
+        peaks.CVG = chip_cvg
+        peaks.SURL = left_cvg
+        peaks.SURR = right_cvg
+
+        peaks_with_info[peak_type] = peaks
+
+    return peaks_with_info
+
+
+def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, args):
+
+    possible_peaks = compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+
+    for peak_type, peaks in possible_peaks.items():
+
         # print(peaks)
+        peaks_f = peaks["+"].overlap(peaks["-"], strandedness=False) #, how="first")
+        peaks_r = peaks["-"].overlap(peaks["+"], strandedness=False) #, how="first")
+        # print(peaks_f)
+        # print(peaks_r)
 
-        # print("ooooo " * 50)
-        # print(peak_enrich_cvg_r)
-        # print(min_er_r)
-        # above_r = slice_min_z(peak_enrich_cvg_r, min_er_r)
-        # above_f = slice_min_z(peak_enrich_cvg_f, min_er_f)
+        peaks_f_bool = np.concatenate(list(peaks_f.apply(lambda df, _: ~df.index.duplicated(keep=False), as_pyranges=False).values()))
+        peaks_r_bool = np.concatenate(list(peaks_r.apply(lambda df, _: ~df.index.duplicated(keep=False), as_pyranges=False).values()))
+        peaks_bool = peaks_r_bool & peaks_f_bool
+        peaks_f.Keep = peaks_bool
+        peaks_r.Keep = peaks_bool
+        peaks_f = peaks_f.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
+        peaks_r = peaks_r.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
 
-        # above = PyRles({k: v for k, v in above_r.items() + above_f.items()})
+        peaks = peaks_f.set_union(peaks_r, strandedness=False)
+
+        print(peaks)
+
+        if peak_type == 1:
+            peaks.Start -= flank_distance
+            peaks.End += flank_distance
+        elif peak_type == 2:
+            peaks.Start -= flank_distance
+        elif peak_type == 3:
+            peaks.End += flank_distance
+        else:
+            assert 0
+
+        print(peaks)
+        new_peak_cvg = peaks.coverage(strand=False)
+
+        print("------")
+        # print(new_peak_cvg)
+        # print(peaks_r.coverage())
+        neg_peak_cvg = cvg["-"] * new_peak_cvg
+        pos_peak_cvg = cvg["+"] * new_peak_cvg
+        # print(pos_peak_cvg)
+        # print(pos_peak_cvg)
+
+        # print(peaks_f)
+        # print(peaks_r)
+
+        # peaks_f_bool = peaks_f.apply(lambda df, _: df[~df.index.duplicated(keep=False)])
+        # peaks_r_bool = peaks_r.apply(lambda df, _: df[~df.index.duplicated(keep=False)])
+
+        # peaks_r_bool = peaks_r.apply(lambda df, _: ~df.index.duplicated(keep=False), as_pyranges=False)
+
+        # print(peaks_f_bool)
+        # print(peaks_r_bool)
+        # print(peaks_f.df)
+        # print(peaks_r.df)
+
+        # print(peaks.index)
 
 
-        # print("peak_type " * 50, peak_type)
-        # print(loc_cvg)
-        # print(" pr " * 50)
-        # print(pr)
 
 
-        # peaks_with_info.append(peaks)
+find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+
+
 
 
 
@@ -678,7 +749,8 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
 # 865 - 431
         # maxz = np.array()
 
-compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+
+
 # print("as coverage" * 50)
 # print(peaks1)
 # rle1 = peaks1["chrY", "+"]
@@ -692,3 +764,12 @@ compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios
 # result.df.to_csv("pr1_2.txt", sep=" ")
 # print(result)
 # print(zs[0])
+
+
+##### CCF
+# The difference is due to different definitions of cross-correlation and autocorrelation in different domains.
+
+# See Wikipedia's article on autocorrelation for more information, but here is the gist. In statistics, autocorrelation is defined as Pearson correlation of the signal with itself at different time lags. In signal processing, on the other hand, it is defined as convolution of the function with itself over all lags without any normalization.
+
+# SciPy takes the latter definition, i.e. the one without normalization. To recover R's ccf results, substract the mean of the signals before running scipy.signal.correlate and divide with the product of standard deviations and length.
+# result = ss.correlate(x - np.mean(x), y - np.mean(y), method='direct')/(np.std(x)*np.std(y)*len(x))
