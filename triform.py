@@ -8,6 +8,8 @@ from pyrle import PyRles, Rle
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+import scipy.signal as ss
+
 
 from natsort import natsorted
 
@@ -590,6 +592,17 @@ def pnorm(max_z):
 
     return r
 
+def ccf(x, y, lag_max = 100):
+
+    result = ss.correlate(y - np.mean(y), x - np.mean(x), method='direct') / (np.std(y) * np.std(x) * len(y))
+    length = (len(result) - 1) // 2
+    lo = length - lag_max
+    hi = length + (lag_max + 1)
+
+    return result[lo:hi]
+
+
+
 
 def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args):
 
@@ -670,10 +683,89 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
 
     return peaks_with_info
 
+def compute_lags(peaks, cvg):
+
+    def add_point_five_to_values(peaks):
+        new_peak_cvg = {}
+
+        for k, v in peaks.coverage(strand=False).items():
+            v.values[v.values != 0] = 0.5
+            v = v.defragment()
+            new_peak_cvg[k] = v
+
+        return PyRles(new_peak_cvg)
+
+    def remove_point_five_from_values(cvg):
+        new_peak_cvg = {}
+
+        for k, v in cvg.items():
+            v.values[v.values != 0] = 0.5
+            v = v.defragment()
+            new_peak_cvg[k] = v
+
+        return PyRles(new_peak_cvg)
+
+    def remove_those_without_point_five(cvg):
+
+        new_cvg = {}
+        for k, v in cvg.items():
+            v.values[v.values %1 != 0.5] = 0
+            v = v.defragment()
+            new_cvg[k] = v
+
+        return PyRles(new_cvg)
+
+    def split_into_views(cvg):
+
+        out = {}
+        for k, v in cvg.items():
+            a = v.values
+            r = v.runs
+            idx = np.where(a!=-0.5)[0]
+            avals = np.split(a[idx],np.where(np.diff(idx)!=1)[0]+1)
+            aruns = np.split(r[idx],np.where(np.diff(idx)!=1)[0]+1)
+            # print(avals)
+
+            out[k] = [np.repeat(r, v) for r, v in zip(avals, aruns)]
+
+        return out
+
+    def compute_lag(n, p):
+        res = ccf(n, p)
+        return res.argmax() - 100
+
+
+    new_peak_cvg = add_point_five_to_values(peaks)
+    print(new_peak_cvg)
+
+    neg_peak_cvg = cvg["-"] + new_peak_cvg
+    pos_peak_cvg = cvg["+"] + new_peak_cvg
+
+    neg_peak_cvg = remove_those_without_point_five(neg_peak_cvg) - 0.5
+    pos_peak_cvg = remove_those_without_point_five(pos_peak_cvg) - 0.5
+    print(pos_peak_cvg)
+
+    neg_views = split_into_views(neg_peak_cvg)
+    pos_views = split_into_views(pos_peak_cvg)
+    # print("lengths" * 50)
+    # print(len(neg_views["chrY"]))
+    # print(len(pos_views["chrY"]))
+
+    # lags = defaultdict(list)
+    lags = []
+    for k in natsorted(neg_views):
+        n, p = neg_views[k], pos_views[k]
+        for _n, _p in zip(n, p):
+            lags.append(compute_lag(_p, _n))
+
+    return np.array(lags)
+
 
 def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, args):
 
     possible_peaks = compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+
+
 
     for peak_type, peaks in possible_peaks.items():
 
@@ -690,10 +782,20 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
         peaks_r.Keep = peaks_bool
         peaks_f = peaks_f.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
         peaks_r = peaks_r.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
+        print("-----")
+        print(peaks_f.df)
+        print(peaks_r.df)
+        print(len(peaks_r.df))
+        print("-----")
 
-        peaks = peaks_f.set_union(peaks_r, strandedness=False)
 
-        print(peaks)
+        print("np.minimum(peaks_f.Start, peaks_r.Start)")
+        print(np.minimum(peaks_f.Start, peaks_r.Start))
+        print(len(np.minimum(peaks_f.Start, peaks_r.Start)))
+        peaks.Start = np.minimum(peaks_f.Start, peaks_r.Start)
+        peaks.End = np.maximum(peaks_f.End, peaks_r.End)
+        # peaks = peaks_f.set_union(peaks_r, strandedness=False)
+
 
         if peak_type == 1:
             peaks.Start -= flank_distance
@@ -706,13 +808,24 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
             assert 0
 
         print(peaks)
-        new_peak_cvg = peaks.coverage(strand=False)
+        lags = compute_lags(peaks, cvg)
+        print(peaks)
+        print(lags)
+        print(len(lags))
+        # peaks.Lags = lags
+        # print(peaks)
 
-        print("------")
-        # print(new_peak_cvg)
-        # print(peaks_r.coverage())
-        neg_peak_cvg = cvg["-"] * new_peak_cvg
-        pos_peak_cvg = cvg["+"] * new_peak_cvg
+        # print(views)
+        # print("-----")
+        # print(neg_peak_cvg)
+        # print(pos_peak_cvg)
+
+
+
+        # for plus, minus in zip(pos_peak_cvg, neg_peak_cvg):
+        #     cc = ccf(pos_peak_cvg, neg_peak_cvg).argmax() - 100
+
+
         # print(pos_peak_cvg)
         # print(pos_peak_cvg)
 
@@ -773,3 +886,15 @@ find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
 
 # SciPy takes the latter definition, i.e. the one without normalization. To recover R's ccf results, substract the mean of the signals before running scipy.signal.correlate and divide with the product of standard deviations and length.
 # result = ss.correlate(x - np.mean(x), y - np.mean(y), method='direct')/(np.std(x)*np.std(y)*len(x))
+
+# ss.correlate(y - np.mean(y), x - np.mean(x), method='direct')/(np.std(y)*np.std(x)*len(y))
+
+# array([ 0.24545455,  0.38181818,  0.42121212,  0.37575758,  0.25757576,
+#         0.07878788, -0.14848485, -0.41212121, -0.7       , -1.        ,
+#        -0.7       , -0.41212121, -0.14848485,  0.07878788,  0.25757576,
+#         0.37575758,  0.42121212,  0.38181818,  0.24545455])
+
+#     -6     -5     -4     -3     -2     -1      0      1      2      3      4
+#  0.376  0.258  0.079 -0.148 -0.412 -0.700 -1.000 -0.700 -0.412 -0.148  0.079
+#      5      6
+#  0.258  0.376
