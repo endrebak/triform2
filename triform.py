@@ -593,13 +593,6 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
 
     all_peaks, zs = _compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
 
-    # for p in all_peaks[1:]:
-    #     hits = p.intersect(all_peaks[0])
-    #     print("overlapping")
-    #     print(hits)
-    #     nonoverlapping = p.subtract(hits)
-    #     print("nonoverlapping")
-    #     print(nonoverlapping)
 
     # print(all_peaks)
     # raise
@@ -720,6 +713,7 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
         return zs
 
 
+    _new_peaks = {}
     for peak_type, peaks in possible_peaks.items():
 
         # print(peaks)
@@ -776,24 +770,42 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
 
         if peak_type == 1:
             zs = _zscores(cvg, surl + surr, 2)
-            max_z = _zscores(cvg + surl + surr, 0, 2).max()
+            max_zs = _zscores(cvg + surl + surr, 0, 2)
+        elif peak_type == 2:
+            zs = _zscores(cvg, surl)
+            max_zs = _zscores(cvg + surl, 0)
         elif peak_type == 3:
             zs = _zscores(cvg, surr)
-            max_z = _zscores(cvg + surr, 0, 2).max()
-            # print(zs)
-            # print(_zs)
-            # max_z = np.maximum(_zs)
-        print(zs)
-        print(max_z)
+            max_zs = _zscores(cvg + surr, 0)
 
-            # zs = np.concatenate(_zscores(d.))
+        peak_nlp = -pnorm(zs)/np.log(10)
+        max_nlp = -pnorm(max_zs)/np.log(10)
+
+        new_starts = np.minimum(peaks_f.Start, peaks_r.Start)
+        new_ends = np.maximum(peaks_f.End, peaks_r.End)
+        new_peaks = PyRanges(seqnames=peaks_f.Chromosome, starts=new_starts, ends=new_ends)
+        new_peaks.Location = new_locs
+        new_peaks.CVG = cvg
+        new_peaks.SURL = surl
+        new_peaks.SURR = surr
+        new_peaks.Form = peak_type
+        new_peaks.NLP = peak_nlp
+        new_peaks.MAX_NLP = max_nlp
+
+        _new_peaks[peak_type] = new_peaks
+
+    return _new_peaks
 
 
 
 
 
-find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+new_peaks = find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+print(new_peaks)
 
+def remove_overlapping_peaks:
+
+    pass
 
 
 
