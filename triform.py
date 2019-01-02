@@ -32,6 +32,7 @@ usecols = [0, 1, 2, 5]
 
 read_width = 100
 min_width = 10
+min_shift = 10
 flank_distance = 150
 max_p = 0.1
 min_er = 3/8
@@ -310,18 +311,6 @@ def compute_ok4(ratios, center, background):
     return PyRles(merge_strands)
 
 
-def _zscores(x, y, ratio=1):
-
-    _zscores = r("""
-function(x,y,r) {  # r = size.y/size.x
-  dif <- (r*x-y)
-  zs <- dif/sqrt(r*(x+y))
-  zs[!dif] <- 0
-  zs
-}
-""")
-    return _zscores(x, y, ratio)
-
 
 def zscores(x, y, ratio=1):
 
@@ -345,12 +334,6 @@ def zscores(x, y, ratio=1):
         zs.values[zs.values < 0] = 0
         zs = zs.defragment()
         new_pyrle[k] = zs
-
-
-    # denominator = PyRles(denominator)
-    # print("denominator")
-    # print(denominator)
-    # zs = difference / denominator
 
     return PyRles(new_pyrle)
 
@@ -596,8 +579,10 @@ def ccf(x, y, lag_max = 100):
 
     result = ss.correlate(y - np.mean(y), x - np.mean(x), method='direct') / (np.std(y) * np.std(x) * len(y))
     length = (len(result) - 1) // 2
+    # print("length ccf " * 5)
     lo = length - lag_max
     hi = length + (lag_max + 1)
+    # print(len(result[lo:hi]))
 
     return result[lo:hi]
 
@@ -685,76 +670,25 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
 
 def compute_lags(peaks, cvg):
 
-    def add_point_five_to_values(peaks):
-        new_peak_cvg = {}
+    # peak_cvg = peaks.coverage()
 
-        for k, v in peaks.coverage(strand=False).items():
-            v.values[v.values != 0] = 0.5
-            v = v.defragment()
-            new_peak_cvg[k] = v
-
-        return PyRles(new_peak_cvg)
-
-    def remove_point_five_from_values(cvg):
-        new_peak_cvg = {}
-
-        for k, v in cvg.items():
-            v.values[v.values != 0] = 0.5
-            v = v.defragment()
-            new_peak_cvg[k] = v
-
-        return PyRles(new_peak_cvg)
-
-    def remove_those_without_point_five(cvg):
-
-        new_cvg = {}
-        for k, v in cvg.items():
-            v.values[v.values %1 != 0.5] = 0
-            v = v.defragment()
-            new_cvg[k] = v
-
-        return PyRles(new_cvg)
-
-    def split_into_views(cvg):
-
-        out = {}
-        for k, v in cvg.items():
-            a = v.values
-            r = v.runs
-            idx = np.where(a!=-0.5)[0]
-            avals = np.split(a[idx],np.where(np.diff(idx)!=1)[0]+1)
-            aruns = np.split(r[idx],np.where(np.diff(idx)!=1)[0]+1)
-            # print(avals)
-
-            out[k] = [np.repeat(r, v) for r, v in zip(avals, aruns)]
-
-        return out
 
     def compute_lag(n, p):
         res = ccf(n, p)
         return res.argmax() - 100
 
-
-    new_peak_cvg = add_point_five_to_values(peaks)
-    print(new_peak_cvg)
-
-    neg_peak_cvg = cvg["-"] + new_peak_cvg
-    pos_peak_cvg = cvg["+"] + new_peak_cvg
-
-    neg_peak_cvg = remove_those_without_point_five(neg_peak_cvg) - 0.5
-    pos_peak_cvg = remove_those_without_point_five(pos_peak_cvg) - 0.5
-    print(pos_peak_cvg)
-
-    neg_views = split_into_views(neg_peak_cvg)
-    pos_views = split_into_views(pos_peak_cvg)
-    # print("lengths" * 50)
-    # print(len(neg_views["chrY"]))
-    # print(len(pos_views["chrY"]))
-
     # lags = defaultdict(list)
     lags = []
-    for k in natsorted(neg_views):
-        n, p = neg_views[k], pos_views[k]
+    for k in peaks.chromosomes:
+        df = peaks[k].df
+        df = df["Start End".split()]
+
+        p = cvg[k, "+"][df]
+        n = cvg[k, "-"][df]
+
+        n = [np.repeat(r.values, r.runs) for r in n]
+        p = [np.repeat(r.values, r.runs) for r in p]
+
         for _n, _p in zip(n, p):
             lags.append(compute_lag(_p, _n))
 
@@ -766,6 +700,25 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
     possible_peaks = compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
 
 
+    def _zscores(x, y, ratio=1):
+
+        _zscores = r("""
+    function(x,y,r) {  # r = size.y/size.x
+    dif <- (r*x-y)
+    zs <- dif/sqrt(r*(x+y))
+    zs[!dif] <- 0
+    zs
+    }
+    """)
+        return _zscores(x, y, ratio)
+
+    def _zscores(x, y, r=1):
+
+        diff = (r * x) - y
+        zs = diff/np.sqrt(r * (x + y))
+
+        return zs
+
 
     for peak_type, peaks in possible_peaks.items():
 
@@ -774,75 +727,67 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
         peaks_r = peaks["-"].overlap(peaks["+"], strandedness=False) #, how="first")
         # print(peaks_f)
         # print(peaks_r)
+        # raise
 
-        peaks_f_bool = np.concatenate(list(peaks_f.apply(lambda df, _: ~df.index.duplicated(keep=False), as_pyranges=False).values()))
-        peaks_r_bool = np.concatenate(list(peaks_r.apply(lambda df, _: ~df.index.duplicated(keep=False), as_pyranges=False).values()))
+        # TODO: try False instead of first
+        peaks_f_bool = np.concatenate(list(peaks_f.apply(lambda df, _: ~df.index.duplicated(keep="first"), as_pyranges=False).values()))
+        peaks_r_bool = np.concatenate(list(peaks_r.apply(lambda df, _: ~df.index.duplicated(keep="first"), as_pyranges=False).values()))
         peaks_bool = peaks_r_bool & peaks_f_bool
         peaks_f.Keep = peaks_bool
         peaks_r.Keep = peaks_bool
         peaks_f = peaks_f.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
         peaks_r = peaks_r.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
-        print("-----")
-        print(peaks_f.df)
-        print(peaks_r.df)
-        print(len(peaks_r.df))
-        print("-----")
 
+        assert np.all(peaks_f.Chromosome.values == peaks_r.Chromosome.values)
 
-        print("np.minimum(peaks_f.Start, peaks_r.Start)")
-        print(np.minimum(peaks_f.Start, peaks_r.Start))
-        print(len(np.minimum(peaks_f.Start, peaks_r.Start)))
-        peaks.Start = np.minimum(peaks_f.Start, peaks_r.Start)
-        peaks.End = np.maximum(peaks_f.End, peaks_r.End)
-        # peaks = peaks_f.set_union(peaks_r, strandedness=False)
+        new_peaks = PyRanges(seqnames = peaks_f.Chromosome, starts = np.minimum(peaks_f.Start, peaks_r.Start), ends = np.maximum(peaks_f.End, peaks_r.End))
 
+        if len(new_peaks) == 0:
+            continue
 
         if peak_type == 1:
-            peaks.Start -= flank_distance
-            peaks.End += flank_distance
+            new_peaks.Start -= flank_distance
+            new_peaks.End += flank_distance
         elif peak_type == 2:
-            peaks.Start -= flank_distance
+            new_peaks.Start -= flank_distance
         elif peak_type == 3:
-            peaks.End += flank_distance
+            new_peaks.End += flank_distance
         else:
             assert 0
 
-        print(peaks)
-        lags = compute_lags(peaks, cvg)
-        print(peaks)
-        print(lags)
-        print(len(lags))
-        # peaks.Lags = lags
-        # print(peaks)
+        lags = compute_lags(new_peaks, cvg)
 
-        # print(views)
-        # print("-----")
-        # print(neg_peak_cvg)
-        # print(pos_peak_cvg)
+        peaks_f.Lag = lags
+        peaks_r.Lag = lags
 
+        peaks_f = peaks_f.apply(lambda df, _: df[df.Lag > min_shift])
+        peaks_r = peaks_r.apply(lambda df, _: df[df.Lag > min_shift])
 
-
-        # for plus, minus in zip(pos_peak_cvg, neg_peak_cvg):
-        #     cc = ccf(pos_peak_cvg, neg_peak_cvg).argmax() - 100
-
-
-        # print(pos_peak_cvg)
-        # print(pos_peak_cvg)
+        if len(peaks_f) == 0:
+            continue
 
         # print(peaks_f)
         # print(peaks_r)
 
-        # peaks_f_bool = peaks_f.apply(lambda df, _: df[~df.index.duplicated(keep=False)])
-        # peaks_r_bool = peaks_r.apply(lambda df, _: df[~df.index.duplicated(keep=False)])
+        new_locs = np.array(np.round((peaks_f.Location.values + peaks_r.Location.values)/2), dtype=np.long)
+        cvg = (peaks_f.CVG.values + peaks_r.CVG.values)
+        surl = (peaks_f.SURL.values + peaks_r.SURL.values)
+        surr = (peaks_f.SURR.values + peaks_r.SURR.values)
 
-        # peaks_r_bool = peaks_r.apply(lambda df, _: ~df.index.duplicated(keep=False), as_pyranges=False)
+        if peak_type == 1:
+            zs = _zscores(cvg, surl + surr, 2)
+            max_z = _zscores(cvg + surl + surr, 0, 2).max()
+        elif peak_type == 3:
+            zs = _zscores(cvg, surr)
+            max_z = _zscores(cvg + surr, 0, 2).max()
+            # print(zs)
+            # print(_zs)
+            # max_z = np.maximum(_zs)
+        print(zs)
+        print(max_z)
 
-        # print(peaks_f_bool)
-        # print(peaks_r_bool)
-        # print(peaks_f.df)
-        # print(peaks_r.df)
+            # zs = np.concatenate(_zscores(d.))
 
-        # print(peaks.index)
 
 
 
