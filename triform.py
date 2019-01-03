@@ -15,6 +15,8 @@ from natsort import natsorted
 
 from pyranges import PyRanges
 
+
+
 c1 = "examples/srf_huds_Gm12878_rep1.bed"
 c2 = "examples/srf_huds_Gm12878_rep2.bed"
 b1 = "examples/backgr_huds_Gm12878_rep1.bed"
@@ -23,8 +25,8 @@ b2 = "examples/backgr_huds_Gm12878_rep2.bed"
 chip_files = [c1]
 input_files = [b1]
 
-# chip_files = [c1, c2]
-# input_files = [b1, b2]
+chip_files = [c1, c2]
+input_files = [b1, b2]
 
 names = "Chromosome Start End Strand".split()
 
@@ -58,12 +60,6 @@ def create_df(f, read_width):
 def create_coverage(df):
 
     return PyRles(df, stranded=True)
-
-# def get_sizes(f, df):
-
-#     returnlen(df)
-
-#     return sizes
 
 
 
@@ -663,6 +659,8 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
 
 def compute_lags(peaks, cvg):
 
+    print(cvg)
+
     # peak_cvg = peaks.coverage()
 
 
@@ -674,6 +672,7 @@ def compute_lags(peaks, cvg):
     lags = []
     for k in peaks.chromosomes:
         df = peaks[k].df
+        print(df)
         df = df["Start End".split()]
 
         p = cvg[k, "+"][df]
@@ -764,19 +763,19 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
         # print(peaks_r)
 
         new_locs = np.array(np.round((peaks_f.Location.values + peaks_r.Location.values)/2), dtype=np.long)
-        cvg = (peaks_f.CVG.values + peaks_r.CVG.values)
+        _cvg = (peaks_f.CVG.values + peaks_r.CVG.values)
         surl = (peaks_f.SURL.values + peaks_r.SURL.values)
         surr = (peaks_f.SURR.values + peaks_r.SURR.values)
 
         if peak_type == 1:
-            zs = _zscores(cvg, surl + surr, 2)
-            max_zs = _zscores(cvg + surl + surr, 0, 2)
+            zs = _zscores(_cvg, surl + surr, 2)
+            max_zs = _zscores(_cvg + surl + surr, 0, 2)
         elif peak_type == 2:
-            zs = _zscores(cvg, surl)
-            max_zs = _zscores(cvg + surl, 0)
+            zs = _zscores(_cvg, surl)
+            max_zs = _zscores(_cvg + surl, 0)
         elif peak_type == 3:
-            zs = _zscores(cvg, surr)
-            max_zs = _zscores(cvg + surr, 0)
+            zs = _zscores(_cvg, surr)
+            max_zs = _zscores(_cvg + surr, 0)
 
         peak_nlp = -pnorm(zs)/np.log(10)
         max_nlp = -pnorm(max_zs)/np.log(10)
@@ -797,61 +796,72 @@ def find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, ar
     return _new_peaks
 
 
-
-
-
 new_peaks = find_peaks(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
-print(new_peaks)
-
-def remove_overlapping_peaks:
-
-    pass
 
 
+def remove_overlapping_peaks(peaks):
+
+    peak_types = set(peaks)
+
+    if len(peak_types) == 3:
+
+        peaks1, peaks2, peaks3 = [peaks[k] for k in sorted(peaks)]
+
+        peaks2 = peaks2.no_overlap(peaks1)
+        peaks3 = peaks3.no_overlap(peaks1)
+
+        peaks3 = peaks3.no_overlap(peaks2)
+
+        peaks = [peaks1, peaks2, peaks3]
+
+    elif peak_types == set([1, 2]) or peak_types == set([1, 3]):
+
+        peaks1, peaks_other = [peaks[k] for k in sorted(peaks)]
+        peaks_other = peaks_other.no_ovelap(peaks1)
+
+    elif peak_types == set([2, 3]):
+
+        peaks = [peaks[k] for k in sorted(peaks)]
+
+    else:
+
+        peaks = [ list(peaks.values())[0] ]
+
+    df = pd.concat([p.df for p in peaks])
+
+    return df
 
 
+peaks = remove_overlapping_peaks(new_peaks)
 
 
+def compute_fdr(df):
+
+    df = df.sort_values("NLP", ascending=False)
+
+    unique_nlp = df.NLP.drop_duplicates()
+
+    sizes = unique_nlp.apply(lambda x: (df.NLP == x).sum())
+    indices = unique_nlp.apply(lambda x: (df.NLP >= x).sum())
+
+    nlrs = []
+    for nlp, j in zip(unique_nlp, indices):
+        m = sum(df.MAX_NLP >= nlp)
+        by = np.log10(1/sum(range(1, m + 1)))
+        nls = nlp + np.log10(j/m)
+        nlrs.append(max(nls - by, 0))
 
 
+    nlqs = [max(nlrs[i:]) for i in range(len(nlrs))]
 
+    nlqss = np.repeat(nlqs, sizes)
 
-# 865 - 431
-        # maxz = np.array()
+    qvals = 10 ** -nlqss
 
+    df.insert(df.shape[1], "QVAL", qvals)
 
+    return df
 
-# print("as coverage" * 50)
-# print(peaks1)
-# rle1 = peaks1["chrY", "+"]
+outdf = compute_fdr(peaks)
 
-
-# import pandas as pd
-# pd.DataFrame(rle1.runs, rle1.values).to_csv("chry_f.txt", sep=" ")
-# 431 + 434
-
-# print(result)
-# result.df.to_csv("pr1_2.txt", sep=" ")
-# print(result)
-# print(zs[0])
-
-
-##### CCF
-# The difference is due to different definitions of cross-correlation and autocorrelation in different domains.
-
-# See Wikipedia's article on autocorrelation for more information, but here is the gist. In statistics, autocorrelation is defined as Pearson correlation of the signal with itself at different time lags. In signal processing, on the other hand, it is defined as convolution of the function with itself over all lags without any normalization.
-
-# SciPy takes the latter definition, i.e. the one without normalization. To recover R's ccf results, substract the mean of the signals before running scipy.signal.correlate and divide with the product of standard deviations and length.
-# result = ss.correlate(x - np.mean(x), y - np.mean(y), method='direct')/(np.std(x)*np.std(y)*len(x))
-
-# ss.correlate(y - np.mean(y), x - np.mean(x), method='direct')/(np.std(y)*np.std(x)*len(y))
-
-# array([ 0.24545455,  0.38181818,  0.42121212,  0.37575758,  0.25757576,
-#         0.07878788, -0.14848485, -0.41212121, -0.7       , -1.        ,
-#        -0.7       , -0.41212121, -0.14848485,  0.07878788,  0.25757576,
-#         0.37575758,  0.42121212,  0.38181818,  0.24545455])
-
-#     -6     -5     -4     -3     -2     -1      0      1      2      3      4
-#  0.376  0.258  0.079 -0.148 -0.412 -0.700 -1.000 -0.700 -0.412 -0.148  0.079
-#      5      6
-#  0.258  0.376
+print(outdf["Chromosome Start End Location Form QVAL".split()].to_csv(sep=" ", index=False))
