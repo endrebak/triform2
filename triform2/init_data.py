@@ -237,7 +237,9 @@ def cython_init_files(treatment_files, input_files, args):
 
     from triform2.src.files_to_coverage import files_to_coverage
 
-    chip, chip_sizes = files_to_coverage(treatment_files, args, "chip", args["lenient"])
+    chip, chip_sizes = files_to_coverage(treatment_files, "chip", args["lenient"], args["read_width"], args["drop_duplicates"])
 
     if input_files:
-        background_sum, background_sizes = files_to_coverage(input_files, args, "input", args["lenient"])
+        background_sum, background_sizes = files_to_coverage(input_files, "input", args["lenient"], args["read_width"], args["drop_duplicates"])
+
+    print(chip)
