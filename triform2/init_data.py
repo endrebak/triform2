@@ -238,8 +238,14 @@ def cython_init_files(treatment_files, input_files, args):
     from triform2.src.files_to_coverage import files_to_coverage
 
     chip, chip_sizes = files_to_coverage(treatment_files, "chip", args["lenient"], args["read_width"], args["drop_duplicates"])
+    chip = init_chip(chip, args["flank_distance"])
+
+    cvg, left, right = sum_data(chip)
+    center = get_locs(chip, "center")
 
     if input_files:
         background_sum, background_sizes = files_to_coverage(input_files, "input", args["lenient"], args["read_width"], args["drop_duplicates"])
 
-    print(chip)
+    ratios, ratio = get_ratios(chip_sizes, background_sizes)
+
+    return cvg, center, left, right, chip, background_sum, ratios, ratio

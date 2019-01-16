@@ -1,5 +1,7 @@
 from itertools import product
 
+import logging
+
 import pandas as pd
 
 from collections import defaultdict
@@ -106,8 +108,11 @@ def zscores(x, y, ratio=1):
         _ratio = _ratio
         difference = (_ratio * x[k]) - y[k]
 
+
+        np.seterr(all="ignore")
         denominator = Rle(v.runs, np.nan_to_num(np.sqrt((_ratio * v).values)))
         zs = difference / denominator
+        np.seterr(all="warn")
         zs = zs.numbers_only()
         zs.values[zs.values < 0] = 0
         zs = zs.defragment()
@@ -139,6 +144,16 @@ def remove_too_short(pyrle, min_width):
     return PyRles(new_pyrle)
 
 
+def set_all_nonzero_to_one(pyrle):
+
+    new_pyrle = {}
+    for k, v in pyrle.items():
+        v = v.copy()
+        v.values[v.values != 0] = 1
+        new_pyrle[k] = v.defragment()
+
+    return PyRles(new_pyrle)
+
 
 def remove_empty(df, _):
     df = df[~(df.Score == 0)]
@@ -158,105 +173,65 @@ def _compute_peaks_and_zscores(cvg, center, left, right, chip, background, ratio
     min_z = qnorm(args["max_p"])
     min_width = args["min_width"]
 
-    # left_right = left + right
-
+    logging.info("ok1")
     ok1 = compute_ok1(chip)
-    # print(ok1["-"])
-
+    logging.info("ok2")
     ok2 = compute_ok23(chip, "left")
-    # print("ok2" * 50)
-    # print(ok2["-"])
+    logging.info("ok3")
     ok3 = compute_ok23(chip, "right")
-    # print("ok3" * 50)
-    # print(ok3["-"])
+    logging.info("ok4")
     ok4 = compute_ok4(ratios, center, background)
-    # print("ok4" * 50)
-    # print(ok4["-"])
 
-    # print("")
-    # print(" cvg " * 50)
-    # print(cvg)
-    # print(left + right)
+    logging.info("zs1")
     zs1 = (ok1 * zscores(cvg, left + right, 2)).defragment(numbers_only=True)
+    logging.info("zs2")
     zs2 = (ok2 * zscores(cvg, left)).defragment(numbers_only=True)
-
+    logging.info("zs3")
     zs3 = (ok3 * zscores(cvg, right)).defragment(numbers_only=True)
-    # _3 = zs3["chrY", "-"].values
-    # _3 = _3[_3 != 0]
-    # print(_3)
+    logging.info("zs4")
     zs4 = (ok4 * zscores(cvg, background, ratio)).defragment(numbers_only=True)
 
-    # print("zs1")
-    # print(zs1["-"])
-    peaks1 = slice_min_z(zs1, min_z)
-    peaks2 = slice_min_z(zs2, min_z)
-    peaks3 = slice_min_z(zs3, min_z)
-    peaks4 = slice_min_z(zs4, min_z)
+    logging.info("slice min")
+    peaks1 = set_all_nonzero_to_one(slice_min_z(zs1, min_z)).to_ranges()
+    peaks2 = set_all_nonzero_to_one(slice_min_z(zs2, min_z)).to_ranges()
+    peaks3 = set_all_nonzero_to_one(slice_min_z(zs3, min_z)).to_ranges()
+    peaks4 = set_all_nonzero_to_one(slice_min_z(zs4, min_z)).to_ranges()
+    logging.info("without zero?")
+    print(peaks4)
 
-    subset1 = remove_too_short(peaks1, min_width)
-    subset2 = remove_too_short(peaks2, min_width)
-    subset3 = remove_too_short(peaks3, min_width)
-    subset4 = remove_too_short(peaks4, min_width)
 
-    # print("peaks1")
-    # print(peaks1["-"])
-    # print("subset1")
-    # print(subset1["-"])
-    peaks1 *= subset1
-    peaks2 *= subset2
-    peaks3 *= subset3
-    peaks4 *= subset4
+    # logging.info("remove_too_short")
+    # peaks1 = peaks1.apply(lambda df, _: df[df.Score > 0])
+    # peaks2 = peaks2.apply(lambda df, _: df[df.Score > 0])
+    # peaks3 = peaks3.apply(lambda df, _: df[df.Score > 0])
+    # peaks4 = peaks4.apply(lambda df, _: df[df.Score > 0])
 
-    peaks1 *= peaks4 # * subset1
-    peaks2 *= peaks4 # * subset2
-    peaks3 *= peaks4 # * subset3
-    # peaks4 *= subset4
-    # print("peaks1")
-    # print(peaks1["-"])
 
-    subset1 = remove_too_short(peaks1, min_width)
-    subset2 = remove_too_short(peaks2, min_width)
-    subset3 = remove_too_short(peaks3, min_width)
+    logging.info("multiply subset")
+    peaks1 = peaks1.intersect(peaks4)
+    peaks2 = peaks2.intersect(peaks4)
+    peaks3 = peaks3.intersect(peaks4)
 
-    peaks1 *= subset1
-    peaks2 *= subset2
-    peaks3 *= subset3
-
-    # only calling remove_too_short here to set values to 1
-    peaks1 = remove_too_short(peaks1, min_width)
-    peaks2 = remove_too_short(peaks2, min_width)
-    peaks3 = remove_too_short(peaks3, min_width)
-
-    # print("peaks1")
-    # print(peaks1["-"])
-    # print("peaks2")
-    # print(peaks2["-"])
-    # print("peaks3")
-    # print(peaks3["-"])
-    # print(zs1)
-    zs1 *= peaks1
-    # print(zs1)
-    zs2 *= peaks2
-    # _3 = zs3["chrY", "-"].values
-    # _3 = _3[_3 != 0]
-    # print(pd.Series(_3))
-    # print(zs3)
-    zs3 *= peaks3
-    # print(zs3)
-    # print(zs3["chrY", "-"].values)
-    # _3 = zs3["chrY", "-"].values
-    # _3 = _3[_3 != 0]
-    # print(pd.Series(_3))
-    # print("peaks1")
-    # print(peaks1["-"])
-    # print("peaks2")
-    # print(peaks2["-"])
-    # print("peaks3")
-    # print(peaks3["-"])# #
+    # logging.info("remove_too_short")
+    peaks1 = peaks1.apply(lambda df, _: df[(df.End - df.Start) > min_width])
+    peaks2 = peaks2.apply(lambda df, _: df[(df.End - df.Start) > min_width])
+    peaks3 = peaks3.apply(lambda df, _: df[(df.End - df.Start) > min_width])
 
     _peaks = [peaks1, peaks2, peaks3]
-    _peaks = [p.to_ranges().apply(remove_empty).cluster(strand=True).apply(add_1_to_start) for p in _peaks]
+
+    # print(len(zs1))
+    zs1 = zs1[peaks1]
+    zs2 = zs2[peaks2]
+    zs3 = zs3[peaks3]
+    # print(len(zs1))
+    # print(zs1)
+    # raise
+    # print(peaks1)
+
     _zscores = [zs1, zs2, zs3]
+    # for peaks in _peaks:
+        # print("ooooo")
+        # print(peaks.apply(lambda df, _: df[df.index.duplicated()]))
 
     return _peaks, _zscores
 
@@ -304,16 +279,34 @@ def pnorm(max_z):
 
 def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args):
 
+    print("peaks and zscores")
     all_peaks, zs = _compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ratios, ratio, args)
+    print("peaks and zscores done")
 
     min_er = args["min_enrichment"]
 
     peaks_with_info = {}
     for peak_type, peaks in enumerate(all_peaks, 1):
 
-        max_zs = find_max(zs[peak_type - 1])
+        # print("find max start")
+        # print(list(len(v) for v in zs[peak_type - 1].values()))
+        # print(peaks)
+        # print(zs[peak_type - 1].values())
+        # t1 = list(zs[peak_type - 1].values())[0]
+        # print(t1)
+        # print(max(t1[1]))
+        max_zs = {}
+        for k, v in zs[peak_type - 1].items():
+            max_zs[k] = np.array([max(v2[1]) for v2 in v])
+
+        # max_zs = np.array(max_zs)
+        # print("find max end")
+
+        # print("len max_zs:", sum(len(v) for v in max_zs.values()))
 
         result = {k: -(pnorm(v)/np.log(10)) for k, v in max_zs.items()}
+        # print(len(peaks))
+        # print(len(np.concatenate([result[k] for k in natsorted(result)])))
         peaks.NLP = np.around(np.concatenate([result[k] for k in natsorted(result)]), 3)
 
         peaks.Location = np.array(np.ceil((peaks.Start + peaks.End)/2), dtype=np.long)
@@ -338,6 +331,7 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
         vals_f = vals_f[np.isfinite(vals_f)]
         vals_r = vals_r[np.isfinite(vals_r)]
 
+        # print(len(vals_f))
         vals_f = vals_f[vals_f > 1]
         vals_r = vals_r[vals_r > 1]
 
@@ -347,6 +341,10 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
 
         vals_f = vals_f > min_er_f
         vals_r = vals_r > min_er_r
+
+        # print(np.sum(vals_f))
+        # print(len(vals_f))
+        # print(peaks["+"])
 
         peaks["+"].Enrichment = vals_f
         peaks["-"].Enrichment = vals_r
@@ -359,13 +357,15 @@ def compute_peaks_and_zscores(cvg, center, left, right, chip, background_sum, ra
         peaks_loc.Start += 1
         peaks_loc.End += 1
 
-        chip_cvg = np.array(np.concatenate([cvg[k][peaks[k].Location] for k in cvg.keys()]), dtype=np.long)
-        left_cvg = np.array(np.concatenate([left[k][peaks[k].Location] for k in left.keys()]), dtype=np.long)
-        right_cvg = np.array(np.concatenate([right[k][peaks[k].Location] for k in right.keys()]), dtype=np.long)
+        chip_cvg = np.array(np.concatenate([cvg[k][peaks[k].Location] for k in cvg.keys() if not peaks[k].empty()]), dtype=np.long)
+        left_cvg = np.array(np.concatenate([left[k][peaks[k].Location] for k in left.keys() if not peaks[k].empty()]), dtype=np.long)
+        right_cvg = np.array(np.concatenate([right[k][peaks[k].Location] for k in right.keys() if not peaks[k].empty()]), dtype=np.long)
 
         peaks.CVG = chip_cvg
         peaks.SURL = left_cvg
         peaks.SURR = right_cvg
+
+        peaks.drop_empty()
 
         peaks_with_info[peak_type] = peaks
 

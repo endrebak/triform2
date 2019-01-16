@@ -60,17 +60,20 @@ def remove_overlapping_peaks(peaks):
 
         peaks1, peaks2, peaks3 = [peaks[k] for k in sorted(peaks)]
 
-        peaks2 = peaks2.no_overlap(peaks1)
-        peaks3 = peaks3.no_overlap(peaks1)
+        peaks2 = peaks2.no_overlap(peaks1, strandedness=False)
+        peaks3 = peaks3.no_overlap(peaks1, strandedness=False)
 
-        peaks3 = peaks3.no_overlap(peaks2)
+        peaks3 = peaks3.no_overlap(peaks2, strandedness=False)
 
         peaks = [peaks1, peaks2, peaks3]
 
     elif peak_types == set([1, 2]) or peak_types == set([1, 3]):
 
         peaks1, peaks_other = [peaks[k] for k in sorted(peaks)]
-        peaks_other = peaks_other.no_ovelap(peaks1)
+        peaks_other = peaks_other.no_overlap(peaks1, strandedness=False)
+
+
+        peaks = [peaks1, peaks_other]
 
     elif peak_types == set([2, 3]):
 
@@ -94,21 +97,31 @@ def find_peaks(possible_peaks, cvg, args):
     _new_peaks = {}
     for peak_type, peaks in possible_peaks.items():
 
-        peaks_f = peaks["+"].overlap(peaks["-"], strandedness=False)
-        peaks_r = peaks["-"].overlap(peaks["+"], strandedness=False)
+        print("8888888")
+        # peaks_r = peaks["+"].join(peaks["+"], strandedness=False)
+        _peaks_f = peaks["+"]
+        _peaks_r = peaks["-"]
+        _peaks_f.df.to_csv("f.csv", sep=" ", index=False)
+        _peaks_r.df.to_csv("r.csv", sep=" ", index=False)
+        peaks_r = _peaks_r.overlap(_peaks_f, strandedness=False)
+        peaks_f = _peaks_f.overlap(_peaks_r, strandedness=False)
+        print(peaks_r)
+        print(peaks_f)
+        # print(peaks["-"].overlap(peaks_f, strandedness=False))
 
         # TODO: try False instead of first
-        peaks_f_bool = np.concatenate(list(peaks_f.apply(lambda df, _: ~df.index.duplicated(keep="first"), as_pyranges=False).values()))
-        peaks_r_bool = np.concatenate(list(peaks_r.apply(lambda df, _: ~df.index.duplicated(keep="first"), as_pyranges=False).values()))
-        peaks_bool = peaks_r_bool & peaks_f_bool
-        peaks_f.Keep = peaks_bool
-        peaks_r.Keep = peaks_bool
-        peaks_f = peaks_f.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
-        peaks_r = peaks_r.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
+        # peaks_f_bool = np.concatenate(list(peaks_f.apply(lambda df, _: ~df.index.duplicated(keep="first"), as_pyranges=False).values()))
+        # peaks_r_bool = np.concatenate(list(peaks_r.apply(lambda df, _: ~df.index.duplicated(keep="first"), as_pyranges=False).values()))
+        # peaks_bool = peaks_r_bool & peaks_f_bool
+        # peaks_f.Keep = peaks_bool
+        # peaks_r.Keep = peaks_bool
+        # peaks_f = peaks_f.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
+        # peaks_r = peaks_r.apply(lambda df, _: df[df.Keep].drop("Keep", 1))
 
         assert np.all(peaks_f.Chromosome.values == peaks_r.Chromosome.values)
 
         new_peaks = PyRanges(seqnames = peaks_f.Chromosome, starts = np.minimum(peaks_f.Start, peaks_r.Start), ends = np.maximum(peaks_f.End, peaks_r.End))
+        new_peaks.drop_empty()
 
         if len(new_peaks) == 0:
             continue

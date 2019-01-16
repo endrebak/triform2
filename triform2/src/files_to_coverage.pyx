@@ -134,13 +134,12 @@ cpdef files_to_coverage(files, datatype, bool lenient, uint32_t read_width, bool
                 positions[i] = v.wrapped_vector[i]
 
             # print("2" * 50, chromosome, strand, len(v))
-            sys.stdout.flush()
+            # sys.stdout.flush()
 
             _mypos = np.copy(positions_arr[:len(v)])
             _myvals = np.copy(values_arr[:len(v)])
 
             s = pd.Series(index=_mypos, data=_myvals, name="Value").sort_index()
-            # print(s)
             # print(s.index.values)
 
             cvg = _coverage(s.index.values, s.values)
@@ -148,11 +147,11 @@ cpdef files_to_coverage(files, datatype, bool lenient, uint32_t read_width, bool
             # print("here", chromosome, strand)
             # print(cvg[0])
             # print(cvg[1])
-            sys.stdout.flush()
+            # sys.stdout.flush()
 
             cvg = Rle(cvg[0], cvg[1])
-            print("cvg " * 50)
-            print(cvg)
+            # print("cvg " * 50)
+            # print(cvg)
 
 
             if datatype == "input" or lenient:
@@ -169,12 +168,14 @@ cpdef files_to_coverage(files, datatype, bool lenient, uint32_t read_width, bool
                 _strict_sizes[strand] += len(v) / 2
                 if (chromosome, strand) not in coverage:
                     _strict_coverage[chromosome, strand] = cvg
-                else:
+                else: # this one is never used, right?
                     _strict_coverage[chromosome, strand] = cvg + _strict_coverage[chromosome, strand]
 
         if datatype == "chip" and not lenient:
             coverage[f] = PyRles(_strict_coverage)
-            sizes[f] = _strict_sizes
+            # sizes[f, strand] = _strict_sizes[strand]
+            for s in _strict_sizes:
+                sizes[f, s] = _strict_sizes[s]
 
             _strict_coverage = dict()
             _strict_sizes = defaultdict(int)
@@ -185,6 +186,7 @@ cpdef files_to_coverage(files, datatype, bool lenient, uint32_t read_width, bool
 
     if datatype == "chip" and lenient:
         # so that strict/lenient effortlessly can be processed the same way
-        coverage["mock_file"] = PyRles(coverage)
+        coverage = {"mock_file": coverage}
+        sizes = {("mock_file", s): sizes[s] for s in sizes}
 
     return coverage, sizes

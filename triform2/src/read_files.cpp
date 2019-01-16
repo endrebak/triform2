@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 #include <iterator>
-
+#include <math.h>
 
 typedef std::vector<uint32_t> intvec;
 typedef std::pair <std::string, char> key;
@@ -69,11 +69,22 @@ genome_map intervals_to_points(genome_intervals genome, uint32_t drop_duplicates
       intervals.erase(unique(intervals.begin(), intervals.end(), start_end_equal_), intervals.end());
     }
 
+
+    // df.Start += 1
+
+    //   width = df.End - df.Start
+    //   gaps = np.array(np.floor((read_width - width) / 2), dtype=np.long)
+    //   df.Start = df.Start - gaps - 1
+    //   df.End = df.Start + width + (2 * gaps)
+
+    //   return df
+
     i = 0;
     for (i = 0; i < intervals.size(); i++){
-      width = (intervals[i].end - (intervals[i].start + 1));
+      start = intervals[i].start + 1;
+      width = (intervals[i].end - (start));
       gap = floor((read_width - width)/2);
-      start = intervals[i].start - gap - 1;
+      start = start - gap - 1;
       end = start + width + gap + gap;
 
       genome_tags[chrom_strand].push_back(start);

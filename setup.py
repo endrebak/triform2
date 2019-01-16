@@ -33,6 +33,7 @@ extensions = [Extension("triform2.src.files_to_coverage",
 setup(
     name="triform2",
     packages=find_packages(),
+    package_data={'': ['*.pyx', '*.pxd', '*.h', '*.c', '*.hpp', "*.bed.gz"]},
     # package_dir=find_packages(),
     ext_modules = cythonize(extensions, annotate=True),
     scripts=["bin/triform2"],
@@ -56,5 +57,6 @@ setup(
         "Operating System :: MacOS :: MacOS X",
         "Topic :: Scientific/Engineering"
     ],
+    include_dirs=["."],
     long_description=
     "Improved sensitivity, specificity and control of false discovery rates in ChIP-Seq peak finding.")
